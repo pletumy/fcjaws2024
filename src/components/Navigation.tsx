@@ -6,9 +6,9 @@ export function Navigation() {
       <Link href="/" className="nav-link">
         Home
       </Link>
-      <Link href="/about" className="nav-link">
+      {/* <Link href="/about" className="nav-link">
         About
-      </Link>
+      </Link> */}
     </nav>
   )
 }

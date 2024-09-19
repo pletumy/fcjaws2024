@@ -66,11 +66,8 @@ export default function RootLayout({
           </main>
           <footer className="py-16">
             <Container>
-              <p>
-                Built by{' '}
-                <Link className="link" href="https://twitter.com/hunterhchang">
-                  Hunter Chang
-                </Link>
+              <p className="prose prose-neutral dark:prose-invert">
+                A simple showcase by <a href="mailto:atran8262@gmail.com" className="text-blue-500 underline">An Tran</a> and <a href="mailto:ple.tumy@gmail.com" className="text-blue-500 underline">My Phan</a>.
               </p>
             </Container>
           </footer>

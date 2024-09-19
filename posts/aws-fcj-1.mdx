@@ -1,0 +1,434 @@
+---
+title: '[FCJ_2024] Integration from SharePoint to AWS Bedrock using AWS Cloud Infrastructure and Terraform'
+description: 'First Workshop submiited to AWS FCJ, by An Tran & My Phan'
+date: 2024-09-19
+---
+
+This AWS workshop was created by [My Phan](https://www.linkedin.com/in/pletumy/) and [An Tran](https://www.linkedin.com/in/an-tr%E1%BA%A7n-095608321/). We've worked together to put together a useful and practical learning experience. We hope it serves as a helpful resource for anyone looking to explore cloud technologies.
+
+<Image
+  alt={`Google`}
+  src={`/images/infra-diagram.png`}
+  width={1190}
+  height={108}
+/>
+
+## Overview
+
+This project demonstrates an end-to-end integration where data from SharePoint is processed using AWS Cloud services, with automation and infrastructure management handled by Terraform. The workflow involves various AWS services like Lambda, S3, Step Functions, and AWS Bedrock. The goal is to efficiently process data from SharePoint and prepare Knowledge bases for GenAI chatbot.
+
+## Prerequisites
+
+- **SharePoint Access:** Ensure access to the SharePoint environment where data will be uploaded.
+- **AWS Account:** A valid AWS account with access to the following services: AWS Lambda, Amazon S3, AWS Step Functions, AWS Bedrock, AWS EventBridge.
+- **Terraform Setup:** Terraform should be installed and configured to manage the AWS infrastructure.
+- **IAM Roles and Permissions:** Correct IAM roles with necessary permissions for Lambda, S3, and Bedrock should be in place to execute the tasks.
+
+## Detailed Explanation
+
+### Terraform for Infrastructure Management
+
+The entire AWS infrastructure, including Lambda functions, S3 buckets, Step Functions, and EventBridge services, is provisioned using Terraform. This enables automated, consistent infrastructure management.
+
+**Install Terraform**
+- Download and install Terraform from the official Terraform website.
+- Ensure Terraform is installed by running the command `terraform --version` in your terminal.
+
+**Create Terraform Configuration Files**
+- Create a root directory called `terraform`.
+- Inside the `terraform` directory, create subdirectories: `eventbridge`, `lambda`, `stepfunction`, and `s3`.
+- Each subdirectory will contain `main.tf` files that configure the corresponding modules.
+
+The directory structure will look like this:
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src="/images/terraform-config.png"
+    width={190}
+    height={344}
+  />
+</div>
+
+The `main.tf` file in the root directory will handle the overall configuration by referencing the modules in each subdirectory.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.003.png`}
+    width={190}
+    height={344}
+  />
+</div>
+
+For the other directories, the files will function as follows:
+
+- **eventbridge/**
+  - `main.tf`: This file defines EventBridge resources, such as EventBridge rules and targets. It configures EventBridge to trigger Step Functions.
+  - `variables.tf`: Defines variables related to EventBridge, such as the EventBridge rule name, cron expression, or other environment variables that you may want to configure externally.
+
+- **lambda/**
+  - **sp2s3/**
+    - `function.zip`: A zip file containing the source code and dependencies for the `sp2s3` Lambda function.
+    - `lambda_function.py`: Python source code file for the `sp2s3` Lambda function.
+    - `office365_api.py`: Python source file containing functions and logic to interact with the Office365 API. The `sp2s3` Lambda can call the functions in this file to retrieve data from Office365.
+    - `main.tf`: Defines the `sp2s3` Lambda resource.
+    - `variables.tf`: Defines the variables required for the sp2s3 Lambda function.
+
+- **s3/**
+  - `main.tf`: Defines S3 resources, including creating S3 buckets and configuring bucket attributes.
+
+- **stepfunction/**
+  - `main.tf`: Defines Step Functions resources, including creating state machines and the states within the state machine. Step Functions can call Lambdas or other services in a sequence.
+  - `variables.tf`: Defines the variables required for Step Functions, such as the state machine name, IAM role, and state configurations.
+
+
+**Initialize Terraform**:
+
+- Open a terminal or command prompt.
+- Navigate to the directory containing your  `main.tf` file.
+- Run the command to initialize Terraform: `terraform init`
+- This command downloads the necessary provider plugins and prepares your working directory for other Terraform commands.
+
+**Review the Execution Plan**:
+
+- Run the command to see what changes Terraform will make: `terraform plan`
+- This command generates and shows an execution plan, allowing you to review changes before applying them.
+
+**Apply the Configuration**:
+
+- Run the command to apply the configuration and create the resources: `terraform apply`
+- Terraform will prompt you to confirm the actions it will take. Type `yes` to proceed.
+
+**Verify the Resources**:
+
+- After applying, Terraform will output any specified outputs, such as ARNs or IDs. You can also check the AWS Management Console to verify that your resources (Lambda functions, S3 buckets, Step Functions, EventBridge rules) are created as expected.
+
+**Clean Up (Optional)**:
+  - If you need to remove the resources created, you can run: `terraform destroy`
+  - Terraform will prompt you to confirm the destruction of resources. Type `yes` to proceed.
+
+Following these steps will allow you to set up, apply, and manage the infrastructure defined in your Terraform configuration.
+
+### SharePoint Data Source
+
+Data originates from SharePoint, where files or documents are uploaded. This serves as the entry point for the entire workflow. Within this directory, there are several key folders and files that contain customer service-related documents and human resources-related documents
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.004.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+### AWS Lambda (sp2s3) 
+
+The Lambda function is designed to ingest documents from SharePoint to an AWS S3 bucket, handling authentication, file processing, and metadata creation. The overall functionality is split across two sections: one dealing with interaction with SharePoint (from the `office365\_api.py` file) and another that handles file processing and uploading to S3 (in `lambda\_function.py`).
+
+#### SharePoint Interaction (office365\_api.py):
+
+This part of the code focuses on interacting with SharePoint, including authenticating and retrieving files or folder information.
+
+- **Imports and Setup**: The necessary libraries are imported, including the Office365 SDK for SharePoint interaction and `environ` for managing environment variables.
+- **Environment Setup**: Credentials and configuration details like SharePoint site, username, and password are fetched from environment variables.
+- **SharePoint Class**: This class contains methods for authentication and for working with files and folders in SharePoint.
+  - **\_auth Method**: Handles authentication to SharePoint using the credentials provided in the environment variables.
+  - **\_get\_files\_list Method**: Retrieves a list of files from a specified SharePoint folder.
+  - **get\_folder\_list Method**: Retrieves subfolders from a specific SharePoint folder.
+  - **download\_file Method**: Downloads a specific file from SharePoint and returns its content of the file.
+
+#### File Processing and Uploading to S3 (lambda\_function.py):
+
+This section handles the file operations, including renaming files, uploading them to S3, and storing metadata. It is designed to run in an AWS Lambda environment.
+
+- **Imports and Setup**: The code loads environment variables for AWS credentials, initializes an S3 client using `boto3`, and imports necessary modules like `hashlib` for file name hashing.
+- **generate\_hashed\_filename**: This function generates a new file name using the MD5 hash of the original name, ensuring that the file extension remains intact.
+- **save\_file**: Handles uploading the file to S3, renaming the file using the hashed name. It also generates a metadata JSON file with the original and hashed file names, along with the S3 path, and uploads this metadata file to S3 as well.
+- **get\_file**: Downloads a file from SharePoint (only for files with .pdf or .docx extensions) and calls the save\_file function to upload the file to S3.
+- **get\_file**: Retrieves a list of files from a SharePoint folder using the SharePoint class and processes each file using get\_file.
+- **get\_folders**: Retrieves a list of subfolders from a specified SharePoint folder, allowing the program to navigate through nested folders.
+- **lambda\_handler**: This is the main Lambda function that handles the AWS event. It verifies AWS credentials, and if folder crawling is enabled, it retrieves and processes files from multiple SharePoint folders, uploading them to the specified S3 bucket.
+
+### Create Lambda function with Terraform
+
+  This **main.tf** configuration creates an AWS Lambda function (sp2s3) and its associated IAM role, policies, and attachments:
+
+- **AWS Provider**: The AWS region is set using the `var.region` variable.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.005.png`}
+    width={190}
+    height={344}
+  />
+</div>
+
+- **Lambda Function**:
+  - The Lambda function named `sp2s3` is created using variables for key parameters (e.g., function name, role, runtime, handler).
+  - The code specifies environment variables and connects the function to a VPC using subnet and security group IDs.
+  - Layers are added, and a timeout is defined.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.006.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **IAM Role**:
+  - A role named `sp2s3-role` is created, allowing Lambda to assume it using the appropriate trust policy.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.007.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **IAM Role Policy**:
+  - A policy (`sp2s3-policy`) is attached to the role, granting permission to access AWS Secrets Manager.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.008.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **Policy Attachments**:
+  - The role is attached to predefined policies: `AWSLambdaVPCAccessExecutionRole` (for VPC access) and `AWSLambdaBasicExecutionRole` (for basic Lambda execution).
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.009.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **Output**: The ARN of the Lambda function is outputted for further use.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.010.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+**variables.tf**: defined for configuring a Lambda function and related resources:
+
+- **region**: Specifies the AWS region where the resources will be deployed (Singapore).
+- **lambda\_function\_name**: Defines the name of the Lambda function.
+- **lambda\_handler**: Indicates the handler function for the Lambda function.
+- **lambda\_runtime**: Sets the runtime environment for the Lambda function (Python 3.11).
+- **lambda\_architectures**: Specifies the architecture of the Lambda function (arm64).
+- **lambda\_source\_filename**: Provides the path to the source code file for the Lambda function.
+- **lambda\_environment\_variable**: Contains environment variables to be used by the Lambda function.
+- **lambda\_layer**: Specifies the ARN of the Lambda layer to be used.
+- **vpc\_subnet\_ids**: Lists the subnet IDs for the VPC configuration.
+- **vpc\_security\_group\_ids**: Lists the security group IDs for the VPC configuration.
+- **lambda\_timeout**: Defines the timeout duration for the Lambda function.
+- **iam\_role\_name**: Sets the name of the IAM role associated with the Lambda function.
+- **iam\_role\_policy\_name**: Sets the name of the IAM role policy.
+- **iam\_policy\_resources**: Lists the resources that the IAM policy will grant permissions to.
+
+Some sample variables are:
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.011.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+This configuration sets up a secure and VPC-enabled AWS Lambda function, along with the necessary IAM roles and policies, ensuring proper permissions and environment configurations for running the function in a controlled AWS environment. The output provides the Lambda function's ARN for easy reference and integration with other infrastructure components.
+
+### Create Amazon S3 with Terraform 
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.012.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+The code sets up an AWS S3 bucket using Terraform. Here’s what the code does:
+
+- **Provider Configuration**:
+  - The aws provider is configured with the region set to ap-southeast-1 (Singapore).
+- **S3 Bucket Resource**:
+  - The code defines a resource of type aws\_s3\_bucket named test\_terraform.
+  - The bucket is created with the name `create-by-terraform`.
+  - The bucket is tagged with two key-value pairs: `Name = "My bucket"` and `Environment = "Dev"`
+  This code configuration creates and tags an S3 bucket in the specified AWS region.
+  
+### Create Step function with Terraform
+This `main.tf` configuration sets up an AWS Step Functions state machine (`Xbuddy-Daily-ingestion`) and its associated IAM role and policies:
+
+- **AWS Provider**: Configures the AWS region as ap-southeast-1.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.013.png`}
+    width={190}
+    height={344}
+  />
+</div>
+
+- **IAM Role**:
+  - Creates an IAM role named `Xbuddy-Daily-ingestion-stepfunction-role-terraform` with a trust policy allowing Step Functions to assume it.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.014.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **IAM Role Policy**:
+  - Attaches a policy (`Xbuddy-Daily-ingestion-stepfunction-policy-terraform`) to the role, granting permissions to invoke Lambda functions and create state machines.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.015.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **Step Functions State Machine**:
+Defines a state machine named `Xbuddy-Daily-ingestion-terraform` with a single task state (sp2s3) that invokes the Lambda function `sp2s3`.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.016.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **Output**:
+Outputs the ARN of the Step Functions state machine for further use.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.017.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+### Create Eventbridge with Terraform
+
+This main.tf configuration sets up an AWS EventBridge rule and related IAM resources:
+
+- **AWS Provider**: Configures the AWS region as ap-southeast-1.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.018.png`}
+    width={190}
+    height={344}
+  />
+</div>
+
+- **IAM Role**:
+Creates an IAM role named EventBridgeStepFunctionRole-terraform with a trust policy allowing EventBridge Scheduler to assume it.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.019.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **IAM Policy**:
+Defines a policy (EventBridgeAccessPolicy-terraform) to allow EventBridge Scheduler to start state machine executions.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.020.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **IAM Role Policy Attachment**:
+Attaches the above policy to the IAM role.
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.021.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+- **EventBridge Scheduler**:
+Sets up a scheduled rule named `Xbuddy-Daily-ingestion-terraform` to trigger the state machine `Xbuddy-Daily-ingestion-terraform` daily at 00:10 (UTC+7).
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <Image
+    alt="Google"
+    src={`/images/Aspose.Words.fbf3e40e-0485-4f00-9534-c7ca2629587d.022.png`}
+    width={1190}
+    height={108}
+  />
+</div>
+
+### Sending Data to AWS Bedrock
+
+The `bedrock.py` file handles the creation and management of a Knowledge Base (KB) using Amazon Bedrock services. It includes functionalities for setting up a knowledge base, creating data sources, ingesting data, and retrieving information from the KB. Below is a breakdown of the key components and functions in the file, which work together to automate these tasks within an AWS Lambda environment.
+
+**Imports and Setup**: The code imports necessary libraries, including boto3 for AWS service interaction, logging, and time for delays.
+
+**BedrockKBAgent Class**: This class handles the creation and management of a Bedrock Knowledge Base (KB) and Data Source. It includes methods for:
+
+- **Initializing the service region** (\_\_init\_\_).
+- **Returning the AWS service client** based on resource needs (\_return\_aws\_service\_client).
+- **Creating a Knowledge Base** (create\_kb), specifying its name, role, and configuration.
+- **Creating a Data Source** (create\_ds), associating an S3 bucket with the Knowledge Base.
+- **Starting an Ingestion Job** (start\_ingestion\_job) to process and sync data from the Data Source into the Knowledge Base.
+- **Retrieving data from the Knowledge Base** (retrieve\_from\_kb) based on a query.
+
+Main Execution Block (if \_\_name\_\_ == "\_\_main\_\_":):
+
+- Creates a Knowledge Base (KB) if it doesn't already exist.
+- Creates a Data Source linked to the KB.
+- Starts the ingestion job to sync data from the Data Source to the KB.
+- Queries the KB using the retrieve\_from\_kb method, searching for relevant information based on the provided query.
+## Applications
+This architecture can be applied to various use cases:
+
+- Data Pipeline Automation: Automating the process of moving and transforming data between SharePoint and AWS services.
+- Machine Learning Workflows: Processing and analyzing data using AWS Bedrock’s machine learning models for predictions, analytics, or AI-driven insights.
+- Scalable Infrastructure: With Terraform, the system is scalable and can be easily replicated across different environments or extended with additional AWS services as needed.
+- Event-Driven Processing: Utilizing EventBridge ensures that events trigger the right processes at the right time, enhancing automation.
+- This revised structure should provide a comprehensive and structured explanation of your project.
